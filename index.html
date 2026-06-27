@@ -2,196 +2,388 @@
 <html lang="de">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Liegestütz-Zähler</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: sans-serif; background: #111; color: #fff; min-height: 100vh; padding: 1rem; }
+        #app { max-width: 520px; margin: 0 auto; padding: 1rem 0; }
 
-    <title>PushUp AI</title>
+        #cam-wrap { position: relative; width: 100%; aspect-ratio: 4/3; background: #000; border-radius: 12px; overflow: hidden; margin-bottom: 1rem; }
+        #v { width: 100%; height: 100%; object-fit: cover; display: block; transform: scaleX(-1); }
+        #overlay { position: absolute; inset: 0; pointer-events: none; transform: scaleX(-1); width: 100%; height: 100%; }
 
-    <meta name="theme-color" content="#0b0d10">
+        #counter-badge {
+            position: absolute; top: 12px; right: 12px;
+            width: 72px; height: 72px; border-radius: 50%;
+            border: 4px solid #378add;
+            background: rgba(0,0,0,0.6);
+            display: flex; align-items: center; justify-content: center; flex-direction: column;
+        }
+        #count-num { font-size: 1.8rem; font-weight: 500; color: #fff; line-height: 1; }
+        #count-label { font-size: 10px; color: rgba(255,255,255,0.6); }
 
-    <link rel="manifest" href="manifest.json">
-    <link rel="stylesheet" href="style.css">
+        #status-pill {
+            position: absolute; bottom: 12px; left: 12px;
+            background: rgba(0,0,0,0.6); border-radius: 20px;
+            padding: 4px 12px; font-size: 12px; color: rgba(255,255,255,0.8);
+        }
 
-    <link rel="preconnect" href="https://cdn.jsdelivr.net">
+        #debug-box {
+            position: absolute; top: 12px; left: 12px;
+            background: rgba(0,0,0,0.65); border-radius: 8px;
+            padding: 6px 10px; font-size: 11px;
+            color: rgba(255,255,255,0.75); line-height: 1.8;
+            display: none;
+        }
+
+        #bar-section { margin-bottom: 1rem; }
+        .bar-row { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+        .bar-label { font-size: 12px; color: #aaa; min-width: 120px; }
+        .bar-bg { flex: 1; height: 10px; background: #222; border-radius: 5px; border: 0.5px solid #333; overflow: hidden; }
+        .bar-fill { height: 100%; width: 0%; border-radius: 5px; transition: width 0.08s; }
+        .bar-val { font-size: 12px; color: #aaa; min-width: 36px; text-align: right; }
+
+        #stats-row { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 10px; margin-bottom: 1rem; }
+        .stat-card { background: #1a1a1a; border-radius: 8px; padding: 10px 12px; border: 0.5px solid #333; }
+        .stat-val { font-size: 1.3rem; font-weight: 500; color: #fff; }
+        .stat-lbl { font-size: 11px; color: #666; margin-top: 2px; }
+
+        #hist-section h3 { font-size: 14px; font-weight: 500; color: #888; margin: 0 0 8px; display: flex; align-items: center; justify-content: space-between; }
+        #hist-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 1rem; }
+        .hist-row { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+        .hist-date { color: #888; min-width: 90px; }
+        .hist-bar-bg { flex: 1; height: 6px; background: #1a1a1a; border-radius: 3px; overflow: hidden; }
+        .hist-bar-fill { height: 100%; background: #378add; border-radius: 3px; }
+        .hist-count { color: #fff; font-weight: 500; min-width: 28px; text-align: right; }
+
+        button.main {
+            width: 100%; padding: 10px; border-radius: 8px; font-size: 14px;
+            cursor: pointer; margin-bottom: 0.75rem;
+            background: transparent; color: #fff; border: 0.5px solid #555;
+        }
+        button.main:hover { background: #1a1a1a; }
+        button.main:disabled { opacity: 0.5; cursor: default; }
+        button.main.accent { border-color: #378add; color: #378add; }
+        button.main.accent:hover { background: rgba(55,138,221,0.1); }
+
+        #reset-btn { font-size: 12px; color: #555; background: none; border: none; cursor: pointer; text-decoration: underline; }
+        #reset-btn:hover { color: #888; }
+
+        #calib-hint { font-size: 12px; color: #666; margin-bottom: 0.75rem; line-height: 1.5; display: none; }
+
+        .phase-indicator {
+            display: flex; gap: 8px; margin-bottom: 1rem;
+        }
+        .phase-dot {
+            flex: 1; padding: 6px; border-radius: 6px; text-align: center;
+            font-size: 12px; background: #1a1a1a; color: #555; border: 0.5px solid #333;
+            transition: all 0.2s;
+        }
+        .phase-dot.active { background: #0c447c; color: #85b7eb; border-color: #378add; }
+        .phase-dot.done { background: #0f3d1a; color: #4caf50; border-color: #4caf50; }
+    </style>
 </head>
-
 <body>
-
 <div id="app">
-
-    <!-- Hintergrund -->
-    <div id="background">
-        <div class="bg-gradient"></div>
-        <div class="bg-noise"></div>
-        <div class="bg-light light1"></div>
-        <div class="bg-light light2"></div>
-    </div>
-
-    <!-- Kamera -->
-    <section id="cameraContainer">
-
-        <video
-            id="camera"
-            autoplay
-            muted
-            playsinline>
-        </video>
-
+    <div id="cam-wrap">
+        <video id="v" autoplay playsinline muted></video>
         <canvas id="overlay"></canvas>
-
-    </section>
-
-    <!-- Glass HUD -->
-    <section id="hud">
-
-        <!-- Rep-Kreis -->
-        <div id="repCircle">
-
-            <svg id="progressSVG" viewBox="0 0 120 120">
-
-                <circle
-                    class="track"
-                    cx="60"
-                    cy="60"
-                    r="52">
-                </circle>
-
-                <circle
-                    class="progress"
-                    cx="60"
-                    cy="60"
-                    r="52">
-                </circle>
-
-            </svg>
-
-            <div id="circleContent">
-
-                <span id="repCount">0</span>
-
-                <span id="repLabel">
-                    REPS
-                </span>
-
-            </div>
-
+        <div id="counter-badge">
+            <span id="count-num">0</span>
+            <span id="count-label">reps</span>
         </div>
-
-        <!-- Status -->
-        <div id="statusGlass">
-
-            <div id="statusText">
-                Bereit
-            </div>
-
-            <div id="depthText">
-                0 %
-            </div>
-
+        <div id="status-pill">Kamera aus</div>
+        <div id="debug-box">
+            <div>Ellbogen-Breite: <span id="d-ew">—</span></div>
+            <div>Baseline: <span id="d-base">—</span></div>
+            <div>Spreizung: <span id="d-spread">—</span></div>
+            <div>Phase: <span id="d-phase">—</span></div>
         </div>
-
-    </section>
-
-    <!-- Countdown -->
-    <div id="countdown">
-
-        <span id="countdownNumber">
-            3
-        </span>
-
     </div>
 
-    <!-- Startscreen -->
-    <section id="startScreen">
+    <button class="main" id="start-btn">Kamera starten</button>
+    <div id="calib-hint">Nimm die obere Liegestütz-Position ein (Arme gestreckt) und drücke Kalibrieren.</div>
+    <button class="main accent" id="calib-btn" style="display:none">Kalibrieren — Arme gestreckt halten</button>
 
-        <div class="glassCard">
-
-            <h1>
-
-                PushUp AI
-
-            </h1>
-
-            <p>
-
-                KI-gestützte Liegestütz-Erkennung
-
-            </p>
-
-            <button id="startButton">
-
-                Training starten
-
-            </button>
-
-        </div>
-
-    </section>
-
-    <!-- Toast -->
-    <div id="toast">
-
-        <span id="toastText">
-
-        </span>
-
+    <div class="phase-indicator" id="phases" style="display:none">
+        <div class="phase-dot" id="ph-calib">Kalibriert</div>
+        <div class="phase-dot" id="ph-down">Runter ↓</div>
+        <div class="phase-dot" id="ph-up">Hoch ↑</div>
     </div>
 
-    <!-- Debug -->
-    <section id="debugPanel">
-
-        <div>
-
-            FPS
-            <span id="fps">
-                --
-            </span>
-
+    <div id="bar-section">
+        <div class="bar-row">
+            <span class="bar-label">Ellbogen-Spreizung</span>
+            <div class="bar-bg"><div class="bar-fill" id="bar-elbow" style="background:#378add"></div></div>
+            <span class="bar-val" id="val-elbow">—</span>
         </div>
-
-        <div>
-
-            Qualität
-            <span id="quality">
-                --
-            </span>
-
+        <div class="bar-row">
+            <span class="bar-label">Schulter-Absenkung</span>
+            <div class="bar-bg"><div class="bar-fill" id="bar-drop" style="background:#9b59b6"></div></div>
+            <span class="bar-val" id="val-drop">—</span>
         </div>
-
-        <div>
-
-            Tiefe
-            <span id="depth">
-                --
-            </span>
-
+        <div class="bar-row">
+            <span class="bar-label">Gesamt-Score</span>
+            <div class="bar-bg"><div class="bar-fill" id="bar-score" style="background:#4caf50"></div></div>
+            <span class="bar-val" id="val-score">—</span>
         </div>
+    </div>
 
-        <div>
+    <div id="stats-row">
+        <div class="stat-card"><div class="stat-val" id="s-today">0</div><div class="stat-lbl">Heute</div></div>
+        <div class="stat-card"><div class="stat-val" id="s-best">0</div><div class="stat-lbl">Bester Tag</div></div>
+        <div class="stat-card"><div class="stat-val" id="s-total">0</div><div class="stat-lbl">Gesamt</div></div>
+    </div>
 
-            Phase
-            <span id="phase">
-                --
-            </span>
-
-        </div>
-
-    </section>
-
+    <div id="hist-section">
+        <h3>Verlauf <button id="reset-btn">Alles zurücksetzen</button></h3>
+        <div id="hist-list"></div>
+    </div>
 </div>
 
-<!-- TensorFlow -->
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.17.0/dist/tf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2.1.3/dist/pose-detection.min.js"></script>
+<script>
+(async () => {
+    const STORAGE_KEY = 'pushup_history_v4';
+    let history = {};
+    let count = 0, isDown = false, detector = null, running = false;
+    let calibrated = false;
+    let baseElbowWidth = null;   // elbow-to-elbow distance at top (normalized by shoulder width)
+    let baseShoulderY = null;    // shoulder Y at top (normalized)
+    let lastPoses = null;
 
-<!-- Pose Detection -->
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
+    const todayKey = () => new Date().toLocaleDateString('de-DE');
 
-<!-- Eigene Dateien -->
-<script src="utils.js"></script>
-<script src="animations.js"></script>
-<script src="ui.js"></script>
-<script src="calibration.js"></script>
-<script src="detector.js"></script>
-<script src="app.js"></script>
+    function loadHistory() {
+        try { const raw = localStorage.getItem(STORAGE_KEY); if (raw) history = JSON.parse(raw); } catch(e) { history = {}; }
+        count = history[todayKey()] || 0;
+        updateUI();
+    }
 
+    function saveHistory() {
+        history[todayKey()] = count;
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(history)); } catch(e) {}
+    }
+
+    function updateUI() {
+        document.getElementById('count-num').textContent = count;
+        document.getElementById('s-today').textContent = count;
+        const vals = Object.values(history).map(Number);
+        document.getElementById('s-best').textContent = vals.length ? Math.max(...vals) : 0;
+        document.getElementById('s-total').textContent = vals.reduce((a,b)=>a+b,0);
+        renderHistory();
+    }
+
+    function renderHistory() {
+        const list = document.getElementById('hist-list');
+        const entries = Object.entries(history)
+            .sort((a,b) => new Date(b[0].split('.').reverse().join('-')) - new Date(a[0].split('.').reverse().join('-')))
+            .slice(0, 7);
+        if (!entries.length) { list.innerHTML = '<span style="font-size:13px;color:#555">Noch keine Sessions</span>'; return; }
+        const max = Math.max(...entries.map(e => Number(e[1])));
+        list.innerHTML = entries.map(([d,c]) => `
+            <div class="hist-row">
+                <span class="hist-date">${d}</span>
+                <div class="hist-bar-bg"><div class="hist-bar-fill" style="width:${max ? Math.round(Number(c)/max*100) : 0}%"></div></div>
+                <span class="hist-count">${c}</span>
+            </div>`).join('');
+    }
+
+    function setStatus(msg, color) {
+        const p = document.getElementById('status-pill');
+        p.textContent = msg;
+        p.style.color = color || 'rgba(255,255,255,0.8)';
+    }
+
+    function setPhase(phase) {
+        // phase: null | 'down' | 'up'
+        const calib = document.getElementById('ph-calib');
+        const down = document.getElementById('ph-down');
+        const up = document.getElementById('ph-up');
+        calib.className = 'phase-dot' + (calibrated ? ' done' : '');
+        down.className = 'phase-dot' + (phase === 'down' ? ' active' : '');
+        up.className = 'phase-dot' + (phase === 'up' ? ' active' : (phase === null && isDown === false && calibrated ? ' done' : ''));
+    }
+
+    function drawSkeleton(canvas, poses, vidW, vidH) {
+        const ctx = canvas.getContext('2d');
+        canvas.width = vidW; canvas.height = vidH;
+        ctx.clearRect(0, 0, vidW, vidH);
+        if (!poses.length) return;
+        const kp = poses[0].keypoints;
+
+        // highlight elbow-to-elbow line in yellow when calibrated
+        const lEl = kp[7], rEl = kp[8];
+        if (calibrated && lEl && rEl && lEl.score > 0.3 && rEl.score > 0.3) {
+            ctx.strokeStyle = isDown ? '#ff9800' : '#4caf50';
+            ctx.lineWidth = 3;
+            ctx.setLineDash([6, 4]);
+            ctx.beginPath(); ctx.moveTo(lEl.x, lEl.y); ctx.lineTo(rEl.x, rEl.y); ctx.stroke();
+            ctx.setLineDash([]);
+        }
+
+        const pairs = [[5,7],[7,9],[6,8],[8,10],[5,6],[11,12],[5,11],[6,12]];
+        ctx.strokeStyle = 'rgba(55,138,221,0.7)'; ctx.lineWidth = 2;
+        pairs.forEach(([i,j]) => {
+            const a = kp[i], b = kp[j];
+            if (a && b && a.score > 0.25 && b.score > 0.25) {
+                ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+            }
+        });
+        kp.forEach(p => {
+            if (p && p.score > 0.25) {
+                ctx.beginPath(); ctx.arc(p.x, p.y, 4, 0, 2*Math.PI);
+                ctx.fillStyle = '#fff'; ctx.fill();
+                ctx.strokeStyle = '#378add'; ctx.lineWidth = 2; ctx.stroke();
+            }
+        });
+    }
+
+    function getFeatures(kp, vidW, vidH) {
+        const lSh = kp[5], rSh = kp[6];
+        const lEl = kp[7], rEl = kp[8];
+        if (!lSh || !rSh || !lEl || !rEl) return null;
+        if (lSh.score < 0.3 || rSh.score < 0.3) return null;
+        if (lEl.score < 0.3 || rEl.score < 0.3) return null;
+
+        // Shoulder width as reference scale (pixels)
+        const shoulderPx = Math.abs(lSh.x - rSh.x);
+        if (shoulderPx < 20) return null;
+
+        // Elbow width normalized by shoulder width
+        // When bending: elbows flare OUT → elbowWidth > shoulderWidth
+        const elbowPx = Math.abs(lEl.x - rEl.x);
+        const elbowNorm = elbowPx / shoulderPx;
+
+        // Average shoulder Y (normalized by frame height)
+        const shoulderY = ((lSh.y + rSh.y) / 2) / vidH;
+
+        return { elbowNorm, shoulderY, shoulderPx, elbowPx };
+    }
+
+    function calibrate(kp, vidW, vidH) {
+        const f = getFeatures(kp, vidW, vidH);
+        if (!f) { setStatus('Pose nicht erkannt — näher zur Kamera', 'orange'); return false; }
+        baseElbowWidth = f.elbowNorm;
+        baseShoulderY = f.shoulderY;
+        calibrated = true;
+        document.getElementById('d-base').textContent = baseElbowWidth.toFixed(3);
+        document.getElementById('calib-btn').textContent = 'Neu kalibrieren';
+        document.getElementById('calib-btn').style.borderColor = '#4caf50';
+        document.getElementById('calib-btn').style.color = '#4caf50';
+        setPhase(null);
+        setStatus("Kalibriert — los!", '#4caf50');
+        setTimeout(() => setStatus('Bereit'), 1500);
+        return true;
+    }
+
+    document.getElementById('calib-btn').onclick = () => {
+        if (!lastPoses || !lastPoses.length) { setStatus('Kein Körper erkannt', 'orange'); return; }
+        const p = lastPoses[0];
+        calibrate(p.keypoints, p._vW || 640, p._vH || 480);
+    };
+
+    document.getElementById('start-btn').onclick = async () => {
+        if (running) return;
+        const btn = document.getElementById('start-btn');
+        btn.disabled = true; btn.textContent = 'Startet…';
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
+            const v = document.getElementById('v');
+            v.srcObject = stream;
+            await new Promise(r => v.onloadedmetadata = r);
+            setStatus('Modell lädt…');
+            detector = await poseDetection.createDetector(
+                poseDetection.SupportedModels.MoveNet,
+                { modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING }
+            );
+            setStatus('Kalibrieren nicht vergessen!');
+            btn.textContent = 'Läuft…';
+            running = true;
+            document.getElementById('calib-hint').style.display = '';
+            document.getElementById('calib-btn').style.display = '';
+            document.getElementById('debug-box').style.display = '';
+            document.getElementById('phases').style.display = '';
+
+            // Thresholds
+            // Elbow flare: normalized elbow width increases when bending
+            // Typically: top position elbowNorm ≈ 1.0, bottom ≈ 1.4–1.8
+            const ELBOW_DOWN_DELTA = 0.25;   // elbowNorm must increase by this much
+            const ELBOW_UP_DELTA   = 0.08;   // elbowNorm must return near baseline
+
+            // Shoulder drop as secondary signal (normalized)
+            const SHOULDER_DOWN_DELTA = 0.03;
+
+            setInterval(async () => {
+                if (!detector) return;
+                try {
+                    const poses = await detector.estimatePoses(v);
+                    const vW = v.videoWidth || 640, vH = v.videoHeight || 480;
+                    drawSkeleton(document.getElementById('overlay'), poses, vW, vH);
+
+                    if (!poses.length) { setStatus('Kein Körper sichtbar'); return; }
+                    poses[0]._vW = vW; poses[0]._vH = vH;
+                    lastPoses = poses;
+
+                    const f = getFeatures(poses[0].keypoints, vW, vH);
+                    if (!f) return;
+
+                    // Update debug
+                    document.getElementById('d-ew').textContent = f.elbowNorm.toFixed(3);
+                    document.getElementById('d-phase').textContent = isDown ? 'unten' : 'oben';
+
+                    if (!calibrated) return;
+
+                    // Compute deltas from baseline
+                    const elbowDelta = f.elbowNorm - baseElbowWidth;         // positive = flaring out
+                    const shoulderDelta = f.shoulderY - baseShoulderY;       // positive = dropped
+
+                    // Combined score (elbow flare is primary, drop secondary)
+                    const score = elbowDelta * 0.75 + shoulderDelta * 0.25;
+
+                    const elbowPct  = Math.min(100, Math.max(0, Math.round(elbowDelta / ELBOW_DOWN_DELTA * 100)));
+                    const dropPct   = Math.min(100, Math.max(0, Math.round(shoulderDelta / SHOULDER_DOWN_DELTA * 100)));
+                    const scorePct  = Math.min(100, Math.max(0, Math.round(score / ELBOW_DOWN_DELTA * 100)));
+
+                    document.getElementById('bar-elbow').style.width = elbowPct + '%';
+                    document.getElementById('val-elbow').textContent = elbowPct + '%';
+                    document.getElementById('bar-drop').style.width = dropPct + '%';
+                    document.getElementById('val-drop').textContent = dropPct + '%';
+                    document.getElementById('bar-score').style.width = scorePct + '%';
+                    document.getElementById('val-score').textContent = scorePct + '%';
+                    document.getElementById('d-spread').textContent = elbowDelta.toFixed(3);
+
+                    if (score > ELBOW_DOWN_DELTA && !isDown) {
+                        isDown = true;
+                        setPhase('down');
+                        setStatus('Runter ↓', '#378add');
+                    }
+                    if (score < ELBOW_UP_DELTA && isDown) {
+                        isDown = false; count++;
+                        saveHistory(); updateUI();
+                        setPhase('up');
+                        setStatus('Rep ' + count + '! ✓', '#4caf50');
+                        setTimeout(() => { setPhase(null); setStatus('Bereit'); }, 900);
+                    }
+                } catch(e) {}
+            }, 120);
+        } catch(e) {
+            btn.disabled = false; btn.textContent = 'Kamera starten';
+            setStatus('Kamerafehler');
+        }
+    };
+
+    document.getElementById('reset-btn').onclick = () => {
+        if (!confirm('Gesamten Verlauf zurücksetzen?')) return;
+        history = {}; count = 0;
+        try { localStorage.removeItem(STORAGE_KEY); } catch(e) {}
+        updateUI();
+    };
+
+    loadHistory();
+})();
+</script>
 </body>
 </html>
