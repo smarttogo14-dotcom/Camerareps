@@ -12,35 +12,20 @@
         #v { width: 100%; height: 100%; object-fit: cover; display: block; transform: scaleX(-1); }
         #overlay { position: absolute; inset: 0; pointer-events: none; transform: scaleX(-1); width: 100%; height: 100%; }
 
-        /* === HEARTBEAT RING === */
         #counter-badge {
             position: absolute; top: 12px; right: 12px;
             width: 72px; height: 72px;
             display: flex; align-items: center; justify-content: center; flex-direction: column;
             z-index: 10;
         }
+        /* NO transition on svg — rAF drives everything */
         #ring-svg {
             position: absolute; inset: 0; width: 100%; height: 100%;
             transform-origin: center center;
-            transition: transform 0.12s cubic-bezier(0.34,1.56,0.64,1);
-            filter: drop-shadow(0 0 0px #378add);
             will-change: transform, filter;
-        }
-        #ring-circle {
-            fill: rgba(0,0,0,0.6);
-            stroke: #378add;
-            stroke-width: 4;
-            transition: stroke 0.12s, stroke-width 0.12s;
         }
         #count-num { font-size: 1.6rem; font-weight: 600; color: #fff; line-height: 1; position: relative; z-index: 1; }
         #count-label { font-size: 10px; color: rgba(255,255,255,0.55); position: relative; z-index: 1; }
-
-        @keyframes repFlash {
-            0%   { transform: scale(1.45); filter: drop-shadow(0 0 14px #4caf50); }
-            60%  { transform: scale(1.25); filter: drop-shadow(0 0 8px #4caf50); }
-            100% { transform: scale(1);    filter: drop-shadow(0 0 0px #378add); }
-        }
-        #ring-svg.flash { animation: repFlash 0.55s ease-out forwards; }
 
         #status-pill {
             position: absolute; bottom: 12px; left: 12px;
@@ -77,7 +62,7 @@
             transition: all 0.2s;
         }
         .phase-dot.active { background: #0c447c; color: #85b7eb; border-color: #378add; }
-        .phase-dot.done { background: #0f3d1a; color: #4caf50; border-color: #4caf50; }
+        .phase-dot.done   { background: #0f3d1a; color: #4caf50; border-color: #4caf50; }
         #depth-track {
             width: 100%; height: 5px; background: #222; border-radius: 3px;
             margin-top: -6px; margin-bottom: 10px; overflow: hidden;
@@ -87,11 +72,6 @@
             background: linear-gradient(90deg, #378add, #9b59b6);
             transition: width 0.08s;
         }
-        #count-big {
-            text-align: center; font-size: 4rem; font-weight: 700;
-            margin-bottom: 1rem; color: #fff; line-height: 1;
-        }
-        #count-big span { font-size: 1rem; font-weight: 400; color: #555; display: block; margin-top: 4px; }
     </style>
 </head>
 <body>
@@ -147,15 +127,80 @@
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2.1.3/dist/pose-detection.min.js"></script>
 <script>
 (async () => {
+    const svg    = document.getElementById('ring-svg');
+    const circle = document.getElementById('ring-circle');
+
     let count = 0, isDown = false, detector = null, running = false;
     let calibrated = false;
     let baseElbowWidth = null, baseShoulderY = null;
     let lastPoses = null;
-    let flashTimeout = null;
 
-    const ELBOW_DOWN_DELTA   = 0.38;
-    const ELBOW_UP_DELTA     = 0.10;
+    const ELBOW_DOWN_DELTA    = 0.38;
+    const ELBOW_UP_DELTA      = 0.10;
     const SHOULDER_DOWN_DELTA = 0.04;
+
+    // ── Ring state (driven by one shared rAF loop) ──────────────────────────
+    // targetDepth: 0–1 from pose (smooth lerp towards this)
+    // flashT: 0 = no flash, >0 = flash in progress (counts down from 1 to 0)
+    let targetDepth  = 0;
+    let smoothDepth  = 0;
+    let flashT       = 0;       // 1 → 0 over FLASH_MS
+    const FLASH_MS   = 550;
+    const LERP_SPEED = 0.18;    // per frame
+
+    function applyRing(depth, flash) {
+        // depth  0–1  (how far down in pushup)
+        // flash  0–1  (1 = just fired, 0 = done)
+
+        let scale, glow, r, g, b;
+
+        if (flash > 0) {
+            // ease-out cubic on flash
+            const e = 1 - Math.pow(flash, 3);
+            scale = 1.45 - e * 0.45;         // 1.45 → 1.0
+            glow  = flash * 18;
+            // green → blue
+            r = Math.round(76  + (55  - 76)  * e);
+            g = Math.round(175 + (138 - 175) * e);
+            b = Math.round(80  + (221 - 80)  * e);
+        } else {
+            scale = 1 + depth * 0.45;
+            glow  = depth * 14;
+            r = Math.round(55  + depth * 200);
+            g = Math.round(138 - depth * 80);
+            b = Math.round(221 - depth * 180);
+        }
+
+        const col = `rgb(${r},${g},${b})`;
+        svg.style.transform = `scale(${scale.toFixed(4)})`;
+        svg.style.filter    = `drop-shadow(0 0 ${glow.toFixed(1)}px ${col})`;
+        circle.setAttribute('stroke', col);
+        circle.setAttribute('stroke-width', (4 + (flash > 0 ? flash : depth) * 3).toFixed(1));
+    }
+
+    let lastTs = null;
+    function rafLoop(ts) {
+        requestAnimationFrame(rafLoop);
+        const dt = lastTs ? Math.min(ts - lastTs, 100) : 16;
+        lastTs = ts;
+
+        // Lerp smoothDepth toward targetDepth
+        smoothDepth += (targetDepth - smoothDepth) * LERP_SPEED;
+
+        // Decay flash
+        if (flashT > 0) {
+            flashT = Math.max(0, flashT - dt / FLASH_MS);
+        }
+
+        applyRing(smoothDepth, flashT);
+    }
+    requestAnimationFrame(rafLoop);
+
+    function triggerFlash() {
+        flashT = 1;
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
 
     function updateUI() {
         document.getElementById('count-num').textContent = count;
@@ -171,41 +216,6 @@
         document.getElementById('ph-calib').className = 'phase-dot' + (calibrated ? ' done' : '');
         document.getElementById('ph-down').className  = 'phase-dot' + (phase === 'down' ? ' active' : '');
         document.getElementById('ph-up').className    = 'phase-dot' + (phase === 'up'   ? ' active' : '');
-    }
-
-    function updateRing(depthPct, repFired) {
-        const svg    = document.getElementById('ring-svg');
-        const circle = document.getElementById('ring-circle');
-
-        if (repFired) {
-            circle.setAttribute('stroke', '#4caf50');
-            svg.classList.remove('flash');
-            void svg.offsetWidth;
-            svg.classList.add('flash');
-            if (flashTimeout) clearTimeout(flashTimeout);
-            flashTimeout = setTimeout(() => {
-                circle.setAttribute('stroke', '#378add');
-                svg.style.transform = '';
-                svg.style.filter = '';
-            }, 600);
-            return;
-        }
-
-        if (!calibrated) return;
-
-        const scale = 1 + depthPct * 0.45;
-        const glow  = depthPct * 14;
-        const r = Math.round(55  + depthPct * 200);
-        const g = Math.round(138 - depthPct * 80);
-        const b = Math.round(221 - depthPct * 180);
-        const strokeColor = `rgb(${r},${g},${b})`;
-
-        svg.style.transform = `scale(${scale})`;
-        svg.style.filter    = `drop-shadow(0 0 ${glow.toFixed(1)}px ${strokeColor})`;
-        circle.setAttribute('stroke', strokeColor);
-        circle.setAttribute('stroke-width', (4 + depthPct * 3).toFixed(1));
-
-        document.getElementById('depth-fill').style.width = (depthPct * 100).toFixed(1) + '%';
     }
 
     function drawSkeleton(canvas, poses, vidW, vidH) {
@@ -255,12 +265,12 @@
         baseElbowWidth = f.elbowNorm;
         baseShoulderY  = f.shoulderY;
         calibrated = true;
+        targetDepth = 0; smoothDepth = 0;
         document.getElementById('d-base').textContent = baseElbowWidth.toFixed(3);
         document.getElementById('calib-btn').textContent = 'Neu kalibrieren';
         document.getElementById('calib-btn').style.borderColor = '#4caf50';
         document.getElementById('calib-btn').style.color = '#4caf50';
         setPhase(null);
-        updateRing(0, false);
         setStatus('Kalibriert — los!', '#4caf50');
         setTimeout(() => setStatus('Bereit'), 1500);
     }
@@ -315,9 +325,10 @@
                     const elbowDelta    = f.elbowNorm - baseElbowWidth;
                     const shoulderDelta = f.shoulderY - baseShoulderY;
                     const score = elbowDelta * 0.75 + shoulderDelta * 0.25;
-                    const depthPct = Math.min(1, Math.max(0, score / ELBOW_DOWN_DELTA));
 
-                    updateRing(depthPct, false);
+                    // feed depth to rAF ring (0–1)
+                    targetDepth = Math.min(1, Math.max(0, score / ELBOW_DOWN_DELTA));
+                    document.getElementById('depth-fill').style.width = (targetDepth * 100).toFixed(1) + '%';
 
                     const elbowPct = Math.min(100, Math.max(0, Math.round(elbowDelta / ELBOW_DOWN_DELTA * 100)));
                     const dropPct  = Math.min(100, Math.max(0, Math.round(shoulderDelta / SHOULDER_DOWN_DELTA * 100)));
@@ -339,7 +350,7 @@
                     if (score < ELBOW_UP_DELTA && isDown) {
                         isDown = false; count++;
                         updateUI();
-                        updateRing(0, true);
+                        triggerFlash();
                         setPhase('up');
                         setStatus('Rep ' + count + '! ✓', '#4caf50');
                         setTimeout(() => { setPhase(null); setStatus('Bereit'); }, 900);
