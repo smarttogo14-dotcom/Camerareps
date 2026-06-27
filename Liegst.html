@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body { margin: 0; background: #000; color: #fff; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; }
+        #cam-box { position: relative; width: 100vw; height: 70vh; }
+        video { width: 100%; height: 100%; object-fit: cover; }
+        #counter { position: absolute; top: 20px; right: 20px; width: 100px; height: 100px; border: 8px solid #007bff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 2em; }
+        #bar-bg { width: 90%; height: 30px; background: #333; margin: 20px; border-radius: 15px; }
+        #bar { height: 100%; width: 0%; background: #007bff; border-radius: 15px; transition: 0.1s; }
+        #list { width: 90%; font-size: 1.2em; }
+    </style>
+</head>
+<body>
+    <div id="cam-box"><video id="v" autoplay playsinline></video><div id="counter">0</div></div>
+    <div id="bar-bg"><div id="bar"></div></div>
+    <div id="list"><h3>Historie:</h3><div id="log"></div></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
+    <script>
+        let count = 0, isDown = false;
+        let history = JSON.parse(localStorage.getItem('pu') || '{}');
+        let today = new Date().toLocaleDateString();
+
+        async function init() {
+            const v = document.getElementById('v');
+            v.srcObject = await navigator.mediaDevices.getUserMedia({video: true});
+            const detector = await poseDetection.createDetector(poseDetection.SupportedModels.MoveNet);
+            setInterval(async () => {
+                const poses = await detector.estimatePoses(v);
+                if (poses.length > 0) {
+                    const s = poses[0].keypoints[5], e = poses[0].keypoints[7], w = poses[0].keypoints[9];
+                    const angle = Math.abs((Math.atan2(w.y-e.y, w.x-e.x) - Math.atan2(s.y-e.y, s.x-e.x)) * 180 / Math.PI);
+                    const p = Math.min(100, Math.max(0, (150 - angle) * 1.5));
+                    document.getElementById('bar').style.width = p + "%";
+                    if (angle < 70 && !isDown) isDown = true;
+                    if (angle > 140 && isDown) {
+                        count++; isDown = false;
+                        document.getElementById('counter').innerText = count;
+                        history[today] = count;
+                        localStorage.setItem('pu', JSON.stringify(history));
+                        updateLog();
+                    }
+                }
+            }, 100);
+        }
+        function updateLog() { document.getElementById('log').innerText = Object.entries(history).map(([d, c]) => `${d}: ${c}`).join(' | '); }
+        init(); updateLog();
+    </script>
+</body>
+</html>
