@@ -8,27 +8,47 @@
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: sans-serif; background: #111; color: #fff; min-height: 100vh; padding: 1rem; }
         #app { max-width: 520px; margin: 0 auto; padding: 1rem 0; }
-
         #cam-wrap { position: relative; width: 100%; aspect-ratio: 4/3; background: #000; border-radius: 12px; overflow: hidden; margin-bottom: 1rem; }
         #v { width: 100%; height: 100%; object-fit: cover; display: block; transform: scaleX(-1); }
         #overlay { position: absolute; inset: 0; pointer-events: none; transform: scaleX(-1); width: 100%; height: 100%; }
 
+        /* === HEARTBEAT RING === */
         #counter-badge {
             position: absolute; top: 12px; right: 12px;
-            width: 72px; height: 72px; border-radius: 50%;
-            border: 4px solid #378add;
-            background: rgba(0,0,0,0.6);
+            width: 72px; height: 72px;
             display: flex; align-items: center; justify-content: center; flex-direction: column;
+            z-index: 10;
         }
-        #count-num { font-size: 1.8rem; font-weight: 500; color: #fff; line-height: 1; }
-        #count-label { font-size: 10px; color: rgba(255,255,255,0.6); }
+        #ring-svg {
+            position: absolute; inset: 0; width: 100%; height: 100%;
+            transform-origin: center center;
+            transition: transform 0.12s cubic-bezier(0.34,1.56,0.64,1);
+            filter: drop-shadow(0 0 0px #378add);
+            will-change: transform, filter;
+        }
+        #ring-circle {
+            fill: rgba(0,0,0,0.6);
+            stroke: #378add;
+            stroke-width: 4;
+            cx: 36; cy: 36; r: 32;
+            transition: stroke 0.12s, stroke-width 0.12s;
+        }
+        #count-num { font-size: 1.6rem; font-weight: 600; color: #fff; line-height: 1; position: relative; z-index: 1; }
+        #count-label { font-size: 10px; color: rgba(255,255,255,0.55); position: relative; z-index: 1; }
+
+        /* flash on rep */
+        @keyframes repFlash {
+            0%   { transform: scale(1.45); filter: drop-shadow(0 0 14px #4caf50); }
+            60%  { transform: scale(1.25); filter: drop-shadow(0 0 8px #4caf50); }
+            100% { transform: scale(1);    filter: drop-shadow(0 0 0px #378add); }
+        }
+        #ring-svg.flash { animation: repFlash 0.55s ease-out forwards; }
 
         #status-pill {
             position: absolute; bottom: 12px; left: 12px;
             background: rgba(0,0,0,0.6); border-radius: 20px;
             padding: 4px 12px; font-size: 12px; color: rgba(255,255,255,0.8);
         }
-
         #debug-box {
             position: absolute; top: 12px; left: 12px;
             background: rgba(0,0,0,0.65); border-radius: 8px;
@@ -36,19 +56,16 @@
             color: rgba(255,255,255,0.75); line-height: 1.8;
             display: none;
         }
-
         #bar-section { margin-bottom: 1rem; }
         .bar-row { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
         .bar-label { font-size: 12px; color: #aaa; min-width: 120px; }
         .bar-bg { flex: 1; height: 10px; background: #222; border-radius: 5px; border: 0.5px solid #333; overflow: hidden; }
         .bar-fill { height: 100%; width: 0%; border-radius: 5px; transition: width 0.08s; }
         .bar-val { font-size: 12px; color: #aaa; min-width: 36px; text-align: right; }
-
         #stats-row { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 10px; margin-bottom: 1rem; }
         .stat-card { background: #1a1a1a; border-radius: 8px; padding: 10px 12px; border: 0.5px solid #333; }
         .stat-val { font-size: 1.3rem; font-weight: 500; color: #fff; }
         .stat-lbl { font-size: 11px; color: #666; margin-top: 2px; }
-
         #hist-section h3 { font-size: 14px; font-weight: 500; color: #888; margin: 0 0 8px; display: flex; align-items: center; justify-content: space-between; }
         #hist-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 1rem; }
         .hist-row { display: flex; align-items: center; gap: 8px; font-size: 13px; }
@@ -56,7 +73,6 @@
         .hist-bar-bg { flex: 1; height: 6px; background: #1a1a1a; border-radius: 3px; overflow: hidden; }
         .hist-bar-fill { height: 100%; background: #378add; border-radius: 3px; }
         .hist-count { color: #fff; font-weight: 500; min-width: 28px; text-align: right; }
-
         button.main {
             width: 100%; padding: 10px; border-radius: 8px; font-size: 14px;
             cursor: pointer; margin-bottom: 0.75rem;
@@ -66,15 +82,10 @@
         button.main:disabled { opacity: 0.5; cursor: default; }
         button.main.accent { border-color: #378add; color: #378add; }
         button.main.accent:hover { background: rgba(55,138,221,0.1); }
-
         #reset-btn { font-size: 12px; color: #555; background: none; border: none; cursor: pointer; text-decoration: underline; }
         #reset-btn:hover { color: #888; }
-
         #calib-hint { font-size: 12px; color: #666; margin-bottom: 0.75rem; line-height: 1.5; display: none; }
-
-        .phase-indicator {
-            display: flex; gap: 8px; margin-bottom: 1rem;
-        }
+        .phase-indicator { display: flex; gap: 8px; margin-bottom: 1rem; }
         .phase-dot {
             flex: 1; padding: 6px; border-radius: 6px; text-align: center;
             font-size: 12px; background: #1a1a1a; color: #555; border: 0.5px solid #333;
@@ -82,6 +93,17 @@
         }
         .phase-dot.active { background: #0c447c; color: #85b7eb; border-color: #378add; }
         .phase-dot.done { background: #0f3d1a; color: #4caf50; border-color: #4caf50; }
+
+        /* depth progress bar under video */
+        #depth-track {
+            width: 100%; height: 5px; background: #222; border-radius: 3px;
+            margin-top: -6px; margin-bottom: 10px; overflow: hidden;
+        }
+        #depth-fill {
+            height: 100%; width: 0%; border-radius: 3px;
+            background: linear-gradient(90deg, #378add, #9b59b6);
+            transition: width 0.08s;
+        }
     </style>
 </head>
 <body>
@@ -90,6 +112,9 @@
         <video id="v" autoplay playsinline muted></video>
         <canvas id="overlay"></canvas>
         <div id="counter-badge">
+            <svg id="ring-svg" viewBox="0 0 72 72" xmlns="http://www.w3.org/2000/svg">
+                <circle id="ring-circle" cx="36" cy="36" r="32" fill="rgba(0,0,0,0.6)" stroke="#378add" stroke-width="4"/>
+            </svg>
             <span id="count-num">0</span>
             <span id="count-label">reps</span>
         </div>
@@ -101,17 +126,16 @@
             <div>Phase: <span id="d-phase">—</span></div>
         </div>
     </div>
+    <div id="depth-track"><div id="depth-fill"></div></div>
 
     <button class="main" id="start-btn">Kamera starten</button>
     <div id="calib-hint">Nimm die obere Liegestütz-Position ein (Arme gestreckt) und drücke Kalibrieren.</div>
     <button class="main accent" id="calib-btn" style="display:none">Kalibrieren — Arme gestreckt halten</button>
-
     <div class="phase-indicator" id="phases" style="display:none">
         <div class="phase-dot" id="ph-calib">Kalibriert</div>
         <div class="phase-dot" id="ph-down">Runter ↓</div>
         <div class="phase-dot" id="ph-up">Hoch ↑</div>
     </div>
-
     <div id="bar-section">
         <div class="bar-row">
             <span class="bar-label">Ellbogen-Spreizung</span>
@@ -129,13 +153,11 @@
             <span class="bar-val" id="val-score">—</span>
         </div>
     </div>
-
     <div id="stats-row">
         <div class="stat-card"><div class="stat-val" id="s-today">0</div><div class="stat-lbl">Heute</div></div>
         <div class="stat-card"><div class="stat-val" id="s-best">0</div><div class="stat-lbl">Bester Tag</div></div>
         <div class="stat-card"><div class="stat-val" id="s-total">0</div><div class="stat-lbl">Gesamt</div></div>
     </div>
-
     <div id="hist-section">
         <h3>Verlauf <button id="reset-btn">Alles zurücksetzen</button></h3>
         <div id="hist-list"></div>
@@ -150,9 +172,14 @@
     let history = {};
     let count = 0, isDown = false, detector = null, running = false;
     let calibrated = false;
-    let baseElbowWidth = null;   // elbow-to-elbow distance at top (normalized by shoulder width)
-    let baseShoulderY = null;    // shoulder Y at top (normalized)
+    let baseElbowWidth = null;
+    let baseShoulderY = null;
     let lastPoses = null;
+
+    // Thresholds — stricter than before
+    const ELBOW_DOWN_DELTA = 0.38;   // must flare out significantly to count as "down"
+    const ELBOW_UP_DELTA   = 0.10;   // must return close to baseline to count rep
+    const SHOULDER_DOWN_DELTA = 0.04;
 
     const todayKey = () => new Date().toLocaleDateString('de-DE');
 
@@ -161,12 +188,10 @@
         count = history[todayKey()] || 0;
         updateUI();
     }
-
     function saveHistory() {
         history[todayKey()] = count;
         try { localStorage.setItem(STORAGE_KEY, JSON.stringify(history)); } catch(e) {}
     }
-
     function updateUI() {
         document.getElementById('count-num').textContent = count;
         document.getElementById('s-today').textContent = count;
@@ -175,7 +200,6 @@
         document.getElementById('s-total').textContent = vals.reduce((a,b)=>a+b,0);
         renderHistory();
     }
-
     function renderHistory() {
         const list = document.getElementById('hist-list');
         const entries = Object.entries(history)
@@ -196,15 +220,55 @@
         p.textContent = msg;
         p.style.color = color || 'rgba(255,255,255,0.8)';
     }
-
     function setPhase(phase) {
-        // phase: null | 'down' | 'up'
-        const calib = document.getElementById('ph-calib');
-        const down = document.getElementById('ph-down');
-        const up = document.getElementById('ph-up');
-        calib.className = 'phase-dot' + (calibrated ? ' done' : '');
-        down.className = 'phase-dot' + (phase === 'down' ? ' active' : '');
-        up.className = 'phase-dot' + (phase === 'up' ? ' active' : (phase === null && isDown === false && calibrated ? ' done' : ''));
+        document.getElementById('ph-calib').className = 'phase-dot' + (calibrated ? ' done' : '');
+        document.getElementById('ph-down').className  = 'phase-dot' + (phase === 'down' ? ' active' : '');
+        document.getElementById('ph-up').className    = 'phase-dot' + (phase === 'up'   ? ' active' : '');
+    }
+
+    // === HEARTBEAT RING ===
+    // depthPct: 0 (top) → 1 (fully down)
+    let currentDepth = 0;
+    let flashTimeout = null;
+
+    function updateRing(depthPct, repFired) {
+        const svg    = document.getElementById('ring-svg');
+        const circle = document.getElementById('ring-circle');
+
+        if (repFired) {
+            // Green flash animation
+            circle.setAttribute('stroke', '#4caf50');
+            svg.classList.remove('flash');
+            void svg.offsetWidth; // reflow to restart animation
+            svg.classList.add('flash');
+            if (flashTimeout) clearTimeout(flashTimeout);
+            flashTimeout = setTimeout(() => {
+                circle.setAttribute('stroke', '#378add');
+                svg.style.transform = '';
+                svg.style.filter = '';
+            }, 600);
+            return;
+        }
+
+        if (!calibrated) return;
+
+        // Smooth scale: 1.0 at top → 1.45 at bottom
+        const scale = 1 + depthPct * 0.45;
+        // Glow intensity: 0 at top → 14px at bottom
+        const glow  = depthPct * 14;
+        // Color: blue at top → orange at halfway → red at bottom
+        const r = Math.round(55  + depthPct * 200);
+        const g = Math.round(138 - depthPct * 80);
+        const b = Math.round(221 - depthPct * 180);
+        const strokeColor = `rgb(${r},${g},${b})`;
+
+        svg.style.transform = `scale(${scale})`;
+        svg.style.filter    = `drop-shadow(0 0 ${glow.toFixed(1)}px ${strokeColor})`;
+        circle.setAttribute('stroke', strokeColor);
+        circle.setAttribute('stroke-width', (4 + depthPct * 3).toFixed(1));
+
+        // depth bar at bottom of video
+        document.getElementById('depth-fill').style.width = (depthPct * 100).toFixed(1) + '%';
     }
 
     function drawSkeleton(canvas, poses, vidW, vidH) {
@@ -213,8 +277,6 @@
         ctx.clearRect(0, 0, vidW, vidH);
         if (!poses.length) return;
         const kp = poses[0].keypoints;
-
-        // highlight elbow-to-elbow line in yellow when calibrated
         const lEl = kp[7], rEl = kp[8];
         if (calibrated && lEl && rEl && lEl.score > 0.3 && rEl.score > 0.3) {
             ctx.strokeStyle = isDown ? '#ff9800' : '#4caf50';
@@ -223,7 +285,6 @@
             ctx.beginPath(); ctx.moveTo(lEl.x, lEl.y); ctx.lineTo(rEl.x, rEl.y); ctx.stroke();
             ctx.setLineDash([]);
         }
-
         const pairs = [[5,7],[7,9],[6,8],[8,10],[5,6],[11,12],[5,11],[6,12]];
         ctx.strokeStyle = 'rgba(55,138,221,0.7)'; ctx.lineWidth = 2;
         pairs.forEach(([i,j]) => {
@@ -247,19 +308,11 @@
         if (!lSh || !rSh || !lEl || !rEl) return null;
         if (lSh.score < 0.3 || rSh.score < 0.3) return null;
         if (lEl.score < 0.3 || rEl.score < 0.3) return null;
-
-        // Shoulder width as reference scale (pixels)
         const shoulderPx = Math.abs(lSh.x - rSh.x);
         if (shoulderPx < 20) return null;
-
-        // Elbow width normalized by shoulder width
-        // When bending: elbows flare OUT → elbowWidth > shoulderWidth
-        const elbowPx = Math.abs(lEl.x - rEl.x);
+        const elbowPx  = Math.abs(lEl.x - rEl.x);
         const elbowNorm = elbowPx / shoulderPx;
-
-        // Average shoulder Y (normalized by frame height)
         const shoulderY = ((lSh.y + rSh.y) / 2) / vidH;
-
         return { elbowNorm, shoulderY, shoulderPx, elbowPx };
     }
 
@@ -267,13 +320,14 @@
         const f = getFeatures(kp, vidW, vidH);
         if (!f) { setStatus('Pose nicht erkannt — näher zur Kamera', 'orange'); return false; }
         baseElbowWidth = f.elbowNorm;
-        baseShoulderY = f.shoulderY;
+        baseShoulderY  = f.shoulderY;
         calibrated = true;
         document.getElementById('d-base').textContent = baseElbowWidth.toFixed(3);
         document.getElementById('calib-btn').textContent = 'Neu kalibrieren';
         document.getElementById('calib-btn').style.borderColor = '#4caf50';
         document.getElementById('calib-btn').style.color = '#4caf50';
         setPhase(null);
+        updateRing(0, false);
         setStatus("Kalibriert — los!", '#4caf50');
         setTimeout(() => setStatus('Bereit'), 1500);
         return true;
@@ -289,6 +343,9 @@
         if (running) return;
         const btn = document.getElementById('start-btn');
         btn.disabled = true; btn.textContent = 'Startet…';
+        // Neue Session — Zähler auf 0 zurücksetzen
+        count = 0;
+        updateUI();
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
             const v = document.getElementById('v');
@@ -303,18 +360,9 @@
             btn.textContent = 'Läuft…';
             running = true;
             document.getElementById('calib-hint').style.display = '';
-            document.getElementById('calib-btn').style.display = '';
-            document.getElementById('debug-box').style.display = '';
-            document.getElementById('phases').style.display = '';
-
-            // Thresholds
-            // Elbow flare: normalized elbow width increases when bending
-            // Typically: top position elbowNorm ≈ 1.0, bottom ≈ 1.4–1.8
-            const ELBOW_DOWN_DELTA = 0.25;   // elbowNorm must increase by this much
-            const ELBOW_UP_DELTA   = 0.08;   // elbowNorm must return near baseline
-
-            // Shoulder drop as secondary signal (normalized)
-            const SHOULDER_DOWN_DELTA = 0.03;
+            document.getElementById('calib-btn').style.display  = '';
+            document.getElementById('debug-box').style.display  = '';
+            document.getElementById('phases').style.display     = '';
 
             setInterval(async () => {
                 if (!detector) return;
@@ -322,7 +370,6 @@
                     const poses = await detector.estimatePoses(v);
                     const vW = v.videoWidth || 640, vH = v.videoHeight || 480;
                     drawSkeleton(document.getElementById('overlay'), poses, vW, vH);
-
                     if (!poses.length) { setStatus('Kein Körper sichtbar'); return; }
                     poses[0]._vW = vW; poses[0]._vH = vH;
                     lastPoses = poses;
@@ -330,45 +377,53 @@
                     const f = getFeatures(poses[0].keypoints, vW, vH);
                     if (!f) return;
 
-                    // Update debug
-                    document.getElementById('d-ew').textContent = f.elbowNorm.toFixed(3);
+                    document.getElementById('d-ew').textContent    = f.elbowNorm.toFixed(3);
                     document.getElementById('d-phase').textContent = isDown ? 'unten' : 'oben';
 
                     if (!calibrated) return;
 
-                    // Compute deltas from baseline
-                    const elbowDelta = f.elbowNorm - baseElbowWidth;         // positive = flaring out
-                    const shoulderDelta = f.shoulderY - baseShoulderY;       // positive = dropped
-
-                    // Combined score (elbow flare is primary, drop secondary)
+                    const elbowDelta   = f.elbowNorm - baseElbowWidth;
+                    const shoulderDelta = f.shoulderY - baseShoulderY;
                     const score = elbowDelta * 0.75 + shoulderDelta * 0.25;
 
-                    const elbowPct  = Math.min(100, Math.max(0, Math.round(elbowDelta / ELBOW_DOWN_DELTA * 100)));
-                    const dropPct   = Math.min(100, Math.max(0, Math.round(shoulderDelta / SHOULDER_DOWN_DELTA * 100)));
-                    const scorePct  = Math.min(100, Math.max(0, Math.round(score / ELBOW_DOWN_DELTA * 100)));
+                    // depth 0–1 relative to the required DOWN threshold
+                    const depthPct = Math.min(1, Math.max(0, score / ELBOW_DOWN_DELTA));
+
+                    updateRing(depthPct, false);
+                    currentDepth = depthPct;
+
+                    const elbowPct = Math.min(100, Math.max(0, Math.round(elbowDelta / ELBOW_DOWN_DELTA * 100)));
+                    const dropPct  = Math.min(100, Math.max(0, Math.round(shoulderDelta / SHOULDER_DOWN_DELTA * 100)));
+                    const scorePct = Math.min(100, Math.max(0, Math.round(score / ELBOW_DOWN_DELTA * 100)));
 
                     document.getElementById('bar-elbow').style.width = elbowPct + '%';
-                    document.getElementById('val-elbow').textContent = elbowPct + '%';
-                    document.getElementById('bar-drop').style.width = dropPct + '%';
-                    document.getElementById('val-drop').textContent = dropPct + '%';
-                    document.getElementById('bar-score').style.width = scorePct + '%';
-                    document.getElementById('val-score').textContent = scorePct + '%';
-                    document.getElementById('d-spread').textContent = elbowDelta.toFixed(3);
+                    document.getElementById('val-elbow').textContent  = elbowPct + '%';
+                    document.getElementById('bar-drop').style.width   = dropPct + '%';
+                    document.getElementById('val-drop').textContent   = dropPct + '%';
+                    document.getElementById('bar-score').style.width  = scorePct + '%';
+                    document.getElementById('val-score').textContent  = scorePct + '%';
+                    document.getElementById('d-spread').textContent   = elbowDelta.toFixed(3);
 
+                    // State machine: require full depth before counting
                     if (score > ELBOW_DOWN_DELTA && !isDown) {
                         isDown = true;
                         setPhase('down');
                         setStatus('Runter ↓', '#378add');
                     }
+
                     if (score < ELBOW_UP_DELTA && isDown) {
-                        isDown = false; count++;
+                        isDown = false;
+                        count++;
                         saveHistory(); updateUI();
+                        updateRing(0, true);   // green flash
                         setPhase('up');
                         setStatus('Rep ' + count + '! ✓', '#4caf50');
                         setTimeout(() => { setPhase(null); setStatus('Bereit'); }, 900);
                     }
+
                 } catch(e) {}
             }, 120);
+
         } catch(e) {
             btn.disabled = false; btn.textContent = 'Kamera starten';
             setStatus('Kamerafehler');
